@@ -1,70 +1,104 @@
-/*
- * This file is part of the libopencm3 project.
- *
- * Copyright (C) 2009 Uwe Hermann <uwe@hermann-uwe.de>
- *
- * This library is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
+#include "ad9850.h"
 
-static void gpio_setup(void)
+#define DDS_PORT GPIOA
+#define DDS_RCC RCC_GPIOA
+#define DDS_CLOCK GPIO0
+#define DDS_RESET GPIO1
+#define DDS_LOAD GPIO2 // Also called FQ_UD (Frequency Update)
+#define DDS_DATA GPIO3
+
+static const float DDS_REF = 125e6;
+static const uint32_t SWEEP_BEGIN = 1e6;
+static const uint32_t SWEEP_END = 30e6;
+static const uint32_t SWEEP_STEP = 2e3;
+
+void delay_ms(uint32_t delay)
 {
-	/* Enable GPIOC clock. */
-	/* Manually: */
-	// RCC_APB2ENR |= RCC_APB2ENR_IOPCEN;
-	/* Using API functions: */
-	rcc_periph_clock_enable(RCC_GPIOC);
+    uint32_t cycles = (delay * 8000)/5;  // 8 Mhz, CMP+BEQ+NOP+ADDS+B
+    uint32_t i = 0;
+    while(i++ < cycles) {
+        __asm__("nop");
+    }
+}
 
-	/* Set GPIO12 (in GPIO port C) to 'output push-pull'. */
-	/* Manually: */
-	// GPIOC_CRH = (GPIO_CNF_OUTPUT_PUSHPULL << (((12 - 8) * 4) + 2));
-	// GPIOC_CRH |= (GPIO_MODE_OUTPUT_2_MHZ << ((12 - 8) * 4));
-	/* Using API functions: */
-	gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
-		      GPIO_CNF_OUTPUT_PUSHPULL, GPIO12);
+void dds_setup(void)
+{
+	rcc_periph_clock_enable(DDS_RCC);
+	gpio_set_mode(DDS_PORT, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
+            DDS_CLOCK | DDS_RESET | DDS_LOAD | DDS_DATA);
+}
+
+void dds_reset(void)
+{
+    // Set everything low first
+    gpio_clear(DDS_PORT, DDS_CLOCK | DDS_RESET | DDS_LOAD | DDS_DATA);
+
+    // Pulse reset
+    gpio_set(DDS_PORT, DDS_RESET);
+    gpio_clear(DDS_PORT, DDS_RESET);
+
+    // Pulse clock
+    gpio_set(DDS_PORT, DDS_CLOCK);
+    gpio_clear(DDS_PORT, DDS_CLOCK);
+
+    // Pulse load
+    gpio_set(DDS_PORT, DDS_LOAD);
+    gpio_clear(DDS_PORT, DDS_LOAD);
+}
+
+void dds_write(uint8_t byte)
+{
+    uint8_t i;
+    uint8_t bit;
+    for(i = 0; i < 8; i++) {
+        bit = ((byte >> i) & 1);
+        if(bit == 1)
+            gpio_set(DDS_PORT, DDS_DATA);
+        else
+            gpio_clear(DDS_PORT, DDS_DATA);
+
+        gpio_set(DDS_PORT, DDS_CLOCK);
+        gpio_clear(DDS_PORT, DDS_CLOCK);
+    }
+}
+
+void dds_update_freq(float freq)
+{
+    // Updates DDS output frequency. Supply frequency in Hz.
+
+    uint32_t tuning_word = (freq * 4294967295UL) / DDS_REF;
+    dds_write(tuning_word & 0xFF);
+    dds_write((tuning_word >> 8) & 0xFF);
+    dds_write((tuning_word >> 16) & 0xFF);
+    dds_write((tuning_word >> 24) & 0xFF);
+    dds_write(0);
+
+    gpio_set(DDS_PORT, DDS_LOAD);
+    gpio_clear(DDS_PORT, DDS_LOAD);
 }
 
 int main(void)
 {
-	int i;
+	dds_setup();
+    dds_reset();
 
-	gpio_setup();
+    dds_update_freq(15e6);
 
-	/* Blink the LED (PC12) on the board. */
+    delay_ms(3000);
+
 	while (1) {
-		/* Manually: */
-		// GPIOC_BSRR = GPIO12;		/* LED off */
-		// for (i = 0; i < 800000; i++)	/* Wait a bit. */
-		// 	__asm__("nop");
-		// GPIOC_BRR = GPIO12;		/* LED on */
-		// for (i = 0; i < 800000; i++)	/* Wait a bit. */
-		// 	__asm__("nop");
+        float i;
+        for(i = SWEEP_BEGIN; i < SWEEP_END; i += SWEEP_STEP) {
+            dds_update_freq(i);
+            delay_ms(1);
+        }
+        for(; i > SWEEP_BEGIN; i -= SWEEP_STEP) {
+            dds_update_freq(i);
+            delay_ms(1);
+        }
 
-		/* Using API functions gpio_set()/gpio_clear(): */
-		// gpio_set(GPIOC, GPIO12);	/* LED off */
-		// for (i = 0; i < 800000; i++)	/* Wait a bit. */
-		// 	__asm__("nop");
-		// gpio_clear(GPIOC, GPIO12);	/* LED on */
-		// for (i = 0; i < 800000; i++)	/* Wait a bit. */
-		// 	__asm__("nop");
-
-		/* Using API function gpio_toggle(): */
-		gpio_toggle(GPIOC, GPIO12);	/* LED on/off */
-		for (i = 0; i < 800000; i++)	/* Wait a bit. */
-			__asm__("nop");
 	}
 
 	return 0;
