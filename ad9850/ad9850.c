@@ -25,8 +25,8 @@ void delay_ms(uint32_t delay)
 
 void dds_setup(void)
 {
-	rcc_periph_clock_enable(DDS_RCC);
-	gpio_set_mode(DDS_PORT, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
+    rcc_periph_clock_enable(DDS_RCC);
+    gpio_set_mode(DDS_PORT, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
             DDS_CLOCK | DDS_RESET | DDS_LOAD | DDS_DATA);
 }
 
@@ -81,14 +81,14 @@ void dds_update_freq(float freq)
 
 int main(void)
 {
-	dds_setup();
+    dds_setup();
     dds_reset();
 
     dds_update_freq(15e6);
 
     delay_ms(3000);
 
-	while (1) {
+    while (1) {
         float i;
         for(i = SWEEP_BEGIN; i < SWEEP_END; i += SWEEP_STEP) {
             dds_update_freq(i);
@@ -99,7 +99,7 @@ int main(void)
             delay_ms(1);
         }
 
-	}
+    }
 
-	return 0;
+    return 0;
 }
