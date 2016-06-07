@@ -1,4 +1,5 @@
-void delay_ms(uint32_t delay);
+#include <stdint.h>
+
 void dds_setup(void);
 void dds_reset(void);
 void dds_write(uint8_t byte);
