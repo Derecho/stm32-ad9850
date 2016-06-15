@@ -4,10 +4,10 @@
 
 #define DDS_PORT GPIOA
 #define DDS_RCC RCC_GPIOA
-#define DDS_CLOCK GPIO0
-#define DDS_RESET GPIO1
-#define DDS_LOAD GPIO2 // Also called FQ_UD (Frequency Update)
-#define DDS_DATA GPIO3
+#define DDS_CLOCK GPIO2
+#define DDS_RESET GPIO3
+#define DDS_LOAD GPIO4 // Also called FQ_UD (Frequency Update)
+#define DDS_DATA GPIO5
 
 static const float DDS_REF = 125e6;
 
